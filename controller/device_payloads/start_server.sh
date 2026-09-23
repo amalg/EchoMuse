@@ -54,6 +54,16 @@ tinymix -D 0 "HP DAC Playback Switch" 1 1
 tinymix -D 0 "MFP Gpio Mute" On
 tinymix -D 0 "PCM Playback Volume" 100 100
 
+# FireOS 6 WiFi: the MediaTek radio power-saves between beacons, arrives late
+# for keepalives, and the AP drops the association (orange-ring flapping,
+# measured 2026-09-23). CAM = constantly awake. GATED on FireOS 6 (API >= 23 in
+# /system/build.prop; FireOS 5 = 22) so proven FireOS 5 behaviour is untouched
+# — though CAM is very likely safe there too. Backgrounded so a slow wlan0 never
+# blocks boot; one-shot, no polling.
+( i=0; while [ $i -lt 30 ] && [ ! -d /sys/class/net/wlan0 ]; do sleep 1; i=$((i+1)); done
+  SDK=$(sed -n 's/^ro.build.version.sdk=//p' /system/build.prop 2>/dev/null)
+  [ "${SDK:-0}" -ge 23 ] 2>/dev/null && iwpriv wlan0 set_power_mode 0 2>/dev/null ) &
+
 # Mic gain — equalised across all four ADCs (A/B/C/D)
 for adc in A B C D; do
     tinymix -D 0 "ADC_$adc Digital Volume Control" 88 88
