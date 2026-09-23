@@ -1,6 +1,12 @@
 package speaker
 
-import "github.com/wilbowes/EchoMuse/internal/bindings/mixer"
+import (
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/wilbowes/EchoMuse/internal/bindings/mixer"
+)
 
 // Jack routing: the codec state each plug position needs.
 //
@@ -38,10 +44,40 @@ const (
 // register. Everything attributed to it is Android's audio HAL reacting to
 // that switch state, which is also why it keeps happening: see
 // reconcileJackRouting.
-const (
-	hpGainInternal = "6"
-	hpGainJack     = "11"
-)
+const hpGainJack = "11"
+
+// hpGainInternal is the internal-driver gain with nothing plugged in.
+//
+// Stock and FireOS 5 sit at index 6 (0dB) and are loud enough there. On
+// FireOS 6 (amonet v2) that same 6 is far too quiet — measured on hardware,
+// HP Driver Gain is the internal-speaker loudness lever (Ext_Amp_Gain is inert
+// for it), and index 35 (+29dB) is loud at 100% / clean at 50%. So the higher
+// value is GATED on FireOS 6 rather than changed unconditionally, to leave
+// proven FireOS 5 behaviour alone.
+var hpGainInternal = func() string {
+	if isFireOS6() {
+		return "35"
+	}
+	return "6"
+}()
+
+// isFireOS6 reports whether the userspace is FireOS 6 (Android 7.x), read from
+// /system/build.prop's API level (FireOS 6 = 25, FireOS 5 = 22). Any read
+// failure — including a host build with no /system/build.prop — returns false,
+// so the conservative FireOS 5 value is used and the host tests see "6".
+func isFireOS6() bool {
+	b, err := os.ReadFile("/system/build.prop")
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "ro.build.version.sdk="); ok {
+			n, err := strconv.Atoi(strings.TrimSpace(v))
+			return err == nil && n >= 23
+		}
+	}
+	return false
+}
 
 // mixerWrite sets one control, by name.
 type mixerWrite struct {
